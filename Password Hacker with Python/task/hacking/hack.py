@@ -1,5 +1,6 @@
 import argparse
 import itertools
+import os
 import socket
 import string
 
@@ -25,9 +26,21 @@ def brute_force_generator():
         base = new_base
 
 
+def common_pw_generator():
+    with open("passwords.txt", 'r') as file:
+        common_pw = file.readlines()
+    for pw in common_pw:
+        upper_lower_combinations = map(lambda x: "".join(x),
+                                       itertools.product(
+                                           *([letter.lower(), letter.upper()]
+                                             for letter in pw.strip())))
+        for combination in upper_lower_combinations:
+            yield combination
+
+
 if __name__ == "__main__":
     args = parser.parse_args()
-    guess_generator = brute_force_generator()
+    guess_generator = common_pw_generator()
 
     with socket.socket() as client_socket:
         address = (args.ip_adress, int(args.port))
